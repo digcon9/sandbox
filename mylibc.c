@@ -98,7 +98,8 @@ const char* my_addresses[] = {
 /* appends the string s to the LOG_FILE */
 void mylog(const char* s){
 	FILE* log = NULL;
-	orig_fopen = dlsym(RTLD_NEXT, "fopen");
+	if(!orig_fopen)
+		orig_fopen = dlsym(RTLD_NEXT, "fopen");
 	log = orig_fopen(LOG_FILE, "a+");
 	if(log == NULL) {
 		perror("file can't be open");
@@ -110,8 +111,8 @@ void mylog(const char* s){
 	fclose(log);
 }
 
+//FIXME: remove it
 int myaddr(const char* addr){
-	//ridof
 	return 1;
 	int i, count = (sizeof my_addresses) / (sizeof (const char*));
 	for(i = 0; i < count; i++){
@@ -190,7 +191,8 @@ void logunlink(const char* filename){
 
 struct dirent *readdir(DIR *dirp){
 	struct dirent* dentry = NULL;
-	orig_readdir = dlsym(RTLD_NEXT, "readdir");
+	if(!orig_readdir)
+		orig_readdir = dlsym(RTLD_NEXT, "readdir");
 	dentry = (struct dirent*)orig_readdir(dirp);
 	while(dentry != NULL && is_invisible(dentry->d_name)){
 		dentry = (struct dirent*)orig_readdir(dirp);
@@ -204,7 +206,8 @@ struct dirent *readdir(DIR *dirp){
 
 struct dirent64 *readdir64(DIR *dirp){
 	struct dirent64* dentry = NULL;
-	orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
+	if(!orig_readdir64)
+		orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
 	dentry = (struct dirent64*)orig_readdir64(dirp);
 	while(dentry != NULL && is_invisible(dentry->d_name)){
 		dentry = (struct dirent64*)orig_readdir64(dirp);
@@ -221,7 +224,8 @@ int open(const char *pathname, int flags, mode_t mode){
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
-	orig_open = dlsym(RTLD_NEXT, "open");
+	if(!orig_open)
+		orig_open = dlsym(RTLD_NEXT, "open");
 	ret = orig_open(pathname, flags, mode);
 	logopen(pathname);
 
@@ -233,7 +237,8 @@ FILE* fopen(const char* pathname, const char* mode){
 	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
 		return ret;
 
-	orig_fopen = dlsym(RTLD_NEXT, "fopen");
+	if(!orig_fopen)
+		orig_fopen = dlsym(RTLD_NEXT, "fopen");
 	ret = orig_fopen(pathname, mode);
 	logopen(pathname);
 	return ret;
@@ -244,7 +249,8 @@ int open64(const char *pathname, int flags, mode_t mode){
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
-	orig_open64 = dlsym(RTLD_NEXT, "open64");		
+	if(!orig_open64)
+		orig_open64 = dlsym(RTLD_NEXT, "open64");		
 	ret = orig_open64(pathname, flags, mode);
 	logopen(pathname);
 	return ret;
@@ -265,7 +271,8 @@ proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
 
 int unlink(const char* pathname){
 	int ret = -1;
-	orig_unlink = dlsym(RTLD_NEXT, "unlink");
+	if(!orig_unlink)
+		orig_unlink = dlsym(RTLD_NEXT, "unlink");
 	if(!is_unremovable(pathname)){
 		ret = orig_unlink(pathname);
 	}
@@ -278,7 +285,8 @@ int unlink(const char* pathname){
 
 int unlinkat(int dirfd, const char *pathname, int flags){
 	int ret = -1;
-	orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
+	if(!orig_unlinkat)
+		orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
 	if(!is_unremovable(pathname)){
 		ret = orig_unlinkat(dirfd, pathname, flags);
 	}
@@ -290,7 +298,8 @@ int unlinkat(int dirfd, const char *pathname, int flags){
 
 int openat(int dirfd, const char *pathname, int flags, mode_t mode){
 	int ret = -1;
-	orig_openat = dlsym(RTLD_NEXT, "openat");
+	if(!orig_openat)
+		orig_openat = dlsym(RTLD_NEXT, "openat");
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
@@ -308,15 +317,18 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
 	}	
 	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
 	mylog(logstring);
-	orig_connect = dlsym(RTLD_NEXT, "connect");
+	if(!orig_connect)
+		orig_connect = dlsym(RTLD_NEXT, "connect");
 	ret = orig_connect(sockfd, addr, addrlen);
 	return ret;
 }
 
 
 int socket(int domain, int type, int protocol){
+	int ret = -1;
 	orig_socket = dlsym(RTLD_NEXT, "socket");
-	int ret = orig_socket(domain, type, protocol);
+	if(!orig_connect)
+		ret = orig_socket(domain, type, protocol);
 	if(ret != -1){
 		socket_info[(unsigned)ret] = domain;
 	}
@@ -325,7 +337,8 @@ int socket(int domain, int type, int protocol){
 
 FILE *freopen(const char *path, const char *mode, FILE *stream){
 	FILE *ret = NULL;
-	orig_freopen = dlsym(RTLD_NEXT, "freopen");
+	if(!orig_freopen)
+		orig_freopen = dlsym(RTLD_NEXT, "freopen");
 	ret = orig_freopen(path, mode, stream);
 	logopen(path);
 	return ret;
@@ -338,21 +351,24 @@ void logexec(const char* filename){
 }
 	
 int execve(const char *filename, char *const argv[], char *const envp[]){
-	orig_execve = dlsym(RTLD_NEXT, "execve");
+	if(!orig_execve)
+		orig_execve = dlsym(RTLD_NEXT, "execve");
 	int ret = orig_execve(filename, argv, envp);
 	logexec(filename);
 	return ret;
 }
 
 int execvp(const char *file, char *const argv[]){
-	orig_execvp = dlsym(RTLD_NEXT, "execvp");
+	if(!orig_execvp)
+		orig_execvp = dlsym(RTLD_NEXT, "execvp");
 	int ret = orig_execvp(file, argv);
 	logexec(file);
 	return ret;
 }
 
 int execl(const char *path, const char *arg, ...){
-	orig_execl = dlsym(RTLD_NEXT, "execl");
+	if(!orig_execl)
+		orig_execl = dlsym(RTLD_NEXT, "execl");
 	int i = 0; char *argp = NULL;
 	va_list vlist;
 	va_start(vlist, arg);
@@ -368,21 +384,24 @@ int execl(const char *path, const char *arg, ...){
 }	
 
 int execlp(const char *file, const char *arg, ...){
-	orig_execlp = dlsym(RTLD_NEXT, "execlp");
+	if(!orig_execlp)
+		orig_execlp = dlsym(RTLD_NEXT, "execlp");
 	int ret = orig_execlp(file, arg);
 	logexec(file);
 	return ret;
 }
 
 int execle(const char *path, const char *arg,...){
-	orig_execle = dlsym(RTLD_NEXT, "execle");
+	if(!orig_execle)
+		orig_execle = dlsym(RTLD_NEXT, "execle");
 	int ret = orig_execle(path, arg);
 	logexec(path);
 	return ret;
 }
 
 int execv(const char *path, char *const argv[]){
-	orig_execv = dlsym(RTLD_NEXT, "execv");
+	if(!orig_execv)
+		orig_execv = dlsym(RTLD_NEXT, "execv");
 	int ret = orig_execv(path, argv);
 	logexec(path);
 	return ret;
