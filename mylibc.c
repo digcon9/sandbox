@@ -189,74 +189,74 @@ void logunlink(const char* filename){
 	free(cur_dir);
 }
 
-//struct dirent *readdir(DIR *dirp){
-//	struct dirent* dentry = NULL;
-//	if(!orig_readdir)
-//		orig_readdir = dlsym(RTLD_NEXT, "readdir");
-//	dentry = (struct dirent*)orig_readdir(dirp);
-//	while(dentry != NULL && is_invisible(dentry->d_name)){
-//		dentry = (struct dirent*)orig_readdir(dirp);
-//		logdentry(dentry);
-//	}
-//	if(dentry != NULL)
-//		logdentry(dentry);
-//	
-//	return dentry;
-//}
-//
-//struct dirent64 *readdir64(DIR *dirp){
-//	struct dirent64* dentry = NULL;
-//	if(!orig_readdir64)
-//		orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
-//	dentry = (struct dirent64*)orig_readdir64(dirp);
-//	while(dentry != NULL && is_invisible(dentry->d_name)){
-//		dentry = (struct dirent64*)orig_readdir64(dirp);
-//		logdentry64(dentry);
-//	}
-//	if(dentry != NULL)
-//		logdentry64(dentry);
-//	
-//	return dentry;
-//}
-//
-//int open(const char *pathname, int flags, mode_t mode){
-//	int ret = -1;
-//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-//		return ret;
-//
-//	if(!orig_open)
-//		orig_open = dlsym(RTLD_NEXT, "open");
-//	ret = orig_open(pathname, flags, mode);
-//	logopen(pathname);
-//
-//	return ret;
-//}
-//
-//FILE* fopen(const char* pathname, const char* mode){
-//	FILE *ret = NULL;
-//	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
-//		return ret;
-//
-//	if(!orig_fopen)
-//		orig_fopen = dlsym(RTLD_NEXT, "fopen");
-//	ret = orig_fopen(pathname, mode);
-//	logopen(pathname);
-//	return ret;
-//}
-//
-//int open64(const char *pathname, int flags, mode_t mode){
-//	int ret = -1;
-//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-//		return ret;
-//
-//	if(!orig_open64)
-//		orig_open64 = dlsym(RTLD_NEXT, "open64");		
-//	ret = orig_open64(pathname, flags, mode);
-//	logopen(pathname);
-//	return ret;
-//}
-//
-//
+struct dirent *readdir(DIR *dirp){
+	struct dirent* dentry = NULL;
+	if(!orig_readdir)
+		orig_readdir = dlsym(RTLD_NEXT, "readdir");
+	dentry = (struct dirent*)orig_readdir(dirp);
+	while(dentry != NULL && is_invisible(dentry->d_name)){
+		dentry = (struct dirent*)orig_readdir(dirp);
+		logdentry(dentry);
+	}
+	if(dentry != NULL)
+		logdentry(dentry);
+	
+	return dentry;
+}
+
+struct dirent64 *readdir64(DIR *dirp){
+	struct dirent64* dentry = NULL;
+	if(!orig_readdir64)
+		orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
+	dentry = (struct dirent64*)orig_readdir64(dirp);
+	while(dentry != NULL && is_invisible(dentry->d_name)){
+		dentry = (struct dirent64*)orig_readdir64(dirp);
+		logdentry64(dentry);
+	}
+	if(dentry != NULL)
+		logdentry64(dentry);
+	
+	return dentry;
+}
+
+int open(const char *pathname, int flags, mode_t mode){
+	int ret = -1;
+	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+		return ret;
+
+	if(!orig_open)
+		orig_open = dlsym(RTLD_NEXT, "open");
+	ret = orig_open(pathname, flags, mode);
+	logopen(pathname);
+
+	return ret;
+}
+
+FILE* fopen(const char* pathname, const char* mode){
+	FILE *ret = NULL;
+	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
+		return ret;
+
+	if(!orig_fopen)
+		orig_fopen = dlsym(RTLD_NEXT, "fopen");
+	ret = orig_fopen(pathname, mode);
+	logopen(pathname);
+	return ret;
+}
+
+int open64(const char *pathname, int flags, mode_t mode){
+	int ret = -1;
+	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+		return ret;
+
+	if(!orig_open64)
+		orig_open64 = dlsym(RTLD_NEXT, "open64");		
+	ret = orig_open64(pathname, flags, mode);
+	logopen(pathname);
+	return ret;
+}
+
+
 //proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
 //	proc_t* ret = NULL;
 //	void *libproc = dlopen("libproc-3.2.8.so", RTLD_LAZY);	
@@ -269,80 +269,82 @@ void logunlink(const char* filename){
 //	return ret;
 //}
 //
-//int unlink(const char* pathname){
-//	int ret = -1;
-//	if(!orig_unlink)
-//		orig_unlink = dlsym(RTLD_NEXT, "unlink");
-//	if(!is_unremovable(pathname)){
-//		ret = orig_unlink(pathname);
-//	}
-//	else
-//		errno = EPERM;	
-//	logunlink(pathname);
-//	return ret;
-//}
-//
-//
-//int unlinkat(int dirfd, const char *pathname, int flags){
-//	int ret = -1;
-//	if(!orig_unlinkat)
-//		orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
-//	if(!is_unremovable(pathname)){
-//		ret = orig_unlinkat(dirfd, pathname, flags);
-//	}
-//	else
-//		errno = EPERM;	
-//	logunlink(pathname);	
-//	return ret;
-//}
-//
-//int openat(int dirfd, const char *pathname, int flags, mode_t mode){
-//	int ret = -1;
-//	if(!orig_openat)
-//		orig_openat = dlsym(RTLD_NEXT, "openat");
-//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-//		return ret;
-//
-//	return orig_openat(dirfd, pathname, flags, mode);
-//}
-//
-//
-//int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
-//	int ret = -1;
-//	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
-//	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
-//	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
-//		printf("Not allowed to connect to %s\n", destaddr);
-//		return ret;
-//	}	
-//	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
-//	mylog(logstring);
-//	if(!orig_connect)
-//		orig_connect = dlsym(RTLD_NEXT, "connect");
-//	ret = orig_connect(sockfd, addr, addrlen);
-//	return ret;
-//}
-//
-//
-//int socket(int domain, int type, int protocol){
-//	int ret = -1;
-//	orig_socket = dlsym(RTLD_NEXT, "socket");
-//	if(!orig_connect)
-//		ret = orig_socket(domain, type, protocol);
-//	if(ret != -1){
-//		socket_info[(unsigned)ret] = domain;
-//	}
-//	return ret;
-//}
-//
-//FILE *freopen(const char *path, const char *mode, FILE *stream){
-//	FILE *ret = NULL;
-//	if(!orig_freopen)
-//		orig_freopen = dlsym(RTLD_NEXT, "freopen");
-//	ret = orig_freopen(path, mode, stream);
-//	logopen(path);
-//	return ret;
-//}
+int unlink(const char* pathname){
+	int ret = -1;
+	if(!orig_unlink)
+		orig_unlink = dlsym(RTLD_NEXT, "unlink");
+	if(!is_unremovable(pathname)){
+		ret = orig_unlink(pathname);
+	}
+	else
+		errno = EPERM;	
+	logunlink(pathname);
+	return ret;
+}
+
+
+int unlinkat(int dirfd, const char *pathname, int flags){
+	int ret = -1;
+	if(!orig_unlinkat)
+		orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
+	if(!is_unremovable(pathname)){
+		ret = orig_unlinkat(dirfd, pathname, flags);
+	}
+	else
+		errno = EPERM;	
+	logunlink(pathname);	
+	return ret;
+}
+
+int openat(int dirfd, const char *pathname, int flags, mode_t mode){
+	int ret = -1;
+	if(!orig_openat)
+		orig_openat = dlsym(RTLD_NEXT, "openat");
+	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+		return ret;
+
+	return orig_openat(dirfd, pathname, flags, mode);
+}
+
+
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
+	int ret = -1;
+	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
+	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
+	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
+		printf("Not allowed to connect to %s\n", destaddr);
+		return ret;
+	}	
+	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
+	mylog(logstring);
+	if(!orig_connect)
+	mylog("first111");
+      	orig_connect = dlsym(RTLD_NEXT, "connect");
+	mylog("second222");
+	ret = orig_connect(sockfd, addr, addrlen);
+	mylog("third333");
+	return ret;
+}
+
+
+int socket(int domain, int type, int protocol){
+	int ret = -1;
+	orig_socket = dlsym(RTLD_NEXT, "socket");
+	ret = orig_socket(domain, type, protocol);
+	if(ret != -1){
+		socket_info[(unsigned)ret] = domain;
+	}
+	return ret;
+}
+
+FILE *freopen(const char *path, const char *mode, FILE *stream){
+	FILE *ret = NULL;
+	if(!orig_freopen)
+		orig_freopen = dlsym(RTLD_NEXT, "freopen");
+	ret = orig_freopen(path, mode, stream);
+	logopen(path);
+	return ret;
+}
 
 void logexec(const char* filename, char *const args[]){
 	orig_snprintf = dlsym(RTLD_NEXT, "snprintf");
