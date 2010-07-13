@@ -107,7 +107,7 @@ void mylog(const char* s){
 	}	
 	fseek(log, 0, SEEK_END);
 	time_t cur_time = time(0);
-	fprintf(log, "%s: %s\n", ctime(&cur_time), s);
+	fprintf(log, "%s: %s\n", (char*)ctime(&cur_time), s);
 	fclose(log);
 }
 
@@ -150,13 +150,13 @@ int is_onlyappend(const char* filename){
 }
 
 void logdentry(struct dirent* dentry){
-	char* cur_dir = (const char*)get_current_dir_name();
+	const char* cur_dir = (const char*)get_current_dir_name();
 	snprintf(logstring, LOG_LENGTH, "readdir; name: %s/%s;\n", cur_dir, dentry->d_name);
 	mylog(logstring);
 }
 
 void logdentry64(struct dirent64* dentry){
-	char* cur_dir = (const char*)get_current_dir_name();
+	const char* cur_dir = (const char*)get_current_dir_name();
 	snprintf(logstring, LOG_LENGTH, "readdir64; name: %s/%s;\n", cur_dir, dentry->d_name);
 	mylog(logstring);
 }
@@ -166,7 +166,7 @@ int absolute_path(const char* path){
 }
 
 void logopen(const char* filename){
-	char* cur_dir = (const char*)get_current_dir_name();
+	char* cur_dir = (char*)get_current_dir_name();
 	char* slash = "/";
 	if(absolute_path(filename)){
 		strcpy(cur_dir, "");
@@ -178,7 +178,7 @@ void logopen(const char* filename){
 }
 
 void logunlink(const char* filename){
-	const char* cur_dir = (const char*)get_current_dir_name();
+	char* cur_dir = (char*)get_current_dir_name();
 	char* slash = "/";
 	if(absolute_path(filename)){
 		strcpy(cur_dir, "");
@@ -189,220 +189,236 @@ void logunlink(const char* filename){
 	free(cur_dir);
 }
 
-struct dirent *readdir(DIR *dirp){
-	struct dirent* dentry = NULL;
-	if(!orig_readdir)
-		orig_readdir = dlsym(RTLD_NEXT, "readdir");
-	dentry = (struct dirent*)orig_readdir(dirp);
-	while(dentry != NULL && is_invisible(dentry->d_name)){
-		dentry = (struct dirent*)orig_readdir(dirp);
-		logdentry(dentry);
-	}
-	if(dentry != NULL)
-		logdentry(dentry);
-	
-	return dentry;
-}
+//struct dirent *readdir(DIR *dirp){
+//	struct dirent* dentry = NULL;
+//	if(!orig_readdir)
+//		orig_readdir = dlsym(RTLD_NEXT, "readdir");
+//	dentry = (struct dirent*)orig_readdir(dirp);
+//	while(dentry != NULL && is_invisible(dentry->d_name)){
+//		dentry = (struct dirent*)orig_readdir(dirp);
+//		logdentry(dentry);
+//	}
+//	if(dentry != NULL)
+//		logdentry(dentry);
+//	
+//	return dentry;
+//}
+//
+//struct dirent64 *readdir64(DIR *dirp){
+//	struct dirent64* dentry = NULL;
+//	if(!orig_readdir64)
+//		orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
+//	dentry = (struct dirent64*)orig_readdir64(dirp);
+//	while(dentry != NULL && is_invisible(dentry->d_name)){
+//		dentry = (struct dirent64*)orig_readdir64(dirp);
+//		logdentry64(dentry);
+//	}
+//	if(dentry != NULL)
+//		logdentry64(dentry);
+//	
+//	return dentry;
+//}
+//
+//int open(const char *pathname, int flags, mode_t mode){
+//	int ret = -1;
+//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+//		return ret;
+//
+//	if(!orig_open)
+//		orig_open = dlsym(RTLD_NEXT, "open");
+//	ret = orig_open(pathname, flags, mode);
+//	logopen(pathname);
+//
+//	return ret;
+//}
+//
+//FILE* fopen(const char* pathname, const char* mode){
+//	FILE *ret = NULL;
+//	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
+//		return ret;
+//
+//	if(!orig_fopen)
+//		orig_fopen = dlsym(RTLD_NEXT, "fopen");
+//	ret = orig_fopen(pathname, mode);
+//	logopen(pathname);
+//	return ret;
+//}
+//
+//int open64(const char *pathname, int flags, mode_t mode){
+//	int ret = -1;
+//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+//		return ret;
+//
+//	if(!orig_open64)
+//		orig_open64 = dlsym(RTLD_NEXT, "open64");		
+//	ret = orig_open64(pathname, flags, mode);
+//	logopen(pathname);
+//	return ret;
+//}
+//
+//
+//proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
+//	proc_t* ret = NULL;
+//	void *libproc = dlopen("libproc-3.2.8.so", RTLD_LAZY);	
+//	if(libproc != NULL && (orig_readproc = dlsym(libproc, "readproc"))){
+//		ret = orig_readproc(PT, p);
+//		if(strstr(p->cmd, "zxzz") != NULL)
+//			ret = NULL; 
+//	}
+//	dlclose(libproc);
+//	return ret;
+//}
+//
+//int unlink(const char* pathname){
+//	int ret = -1;
+//	if(!orig_unlink)
+//		orig_unlink = dlsym(RTLD_NEXT, "unlink");
+//	if(!is_unremovable(pathname)){
+//		ret = orig_unlink(pathname);
+//	}
+//	else
+//		errno = EPERM;	
+//	logunlink(pathname);
+//	return ret;
+//}
+//
+//
+//int unlinkat(int dirfd, const char *pathname, int flags){
+//	int ret = -1;
+//	if(!orig_unlinkat)
+//		orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
+//	if(!is_unremovable(pathname)){
+//		ret = orig_unlinkat(dirfd, pathname, flags);
+//	}
+//	else
+//		errno = EPERM;	
+//	logunlink(pathname);	
+//	return ret;
+//}
+//
+//int openat(int dirfd, const char *pathname, int flags, mode_t mode){
+//	int ret = -1;
+//	if(!orig_openat)
+//		orig_openat = dlsym(RTLD_NEXT, "openat");
+//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+//		return ret;
+//
+//	return orig_openat(dirfd, pathname, flags, mode);
+//}
+//
+//
+//int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
+//	int ret = -1;
+//	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
+//	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
+//	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
+//		printf("Not allowed to connect to %s\n", destaddr);
+//		return ret;
+//	}	
+//	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
+//	mylog(logstring);
+//	if(!orig_connect)
+//		orig_connect = dlsym(RTLD_NEXT, "connect");
+//	ret = orig_connect(sockfd, addr, addrlen);
+//	return ret;
+//}
+//
+//
+//int socket(int domain, int type, int protocol){
+//	int ret = -1;
+//	orig_socket = dlsym(RTLD_NEXT, "socket");
+//	if(!orig_connect)
+//		ret = orig_socket(domain, type, protocol);
+//	if(ret != -1){
+//		socket_info[(unsigned)ret] = domain;
+//	}
+//	return ret;
+//}
+//
+//FILE *freopen(const char *path, const char *mode, FILE *stream){
+//	FILE *ret = NULL;
+//	if(!orig_freopen)
+//		orig_freopen = dlsym(RTLD_NEXT, "freopen");
+//	ret = orig_freopen(path, mode, stream);
+//	logopen(path);
+//	return ret;
+//}
 
-struct dirent64 *readdir64(DIR *dirp){
-	struct dirent64* dentry = NULL;
-	if(!orig_readdir64)
-		orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
-	dentry = (struct dirent64*)orig_readdir64(dirp);
-	while(dentry != NULL && is_invisible(dentry->d_name)){
-		dentry = (struct dirent64*)orig_readdir64(dirp);
-		logdentry64(dentry);
-	}
-	if(dentry != NULL)
-		logdentry64(dentry);
-	
-	return dentry;
-}
-
-int open(const char *pathname, int flags, mode_t mode){
-	int ret = -1;
-	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-		return ret;
-
-	if(!orig_open)
-		orig_open = dlsym(RTLD_NEXT, "open");
-	ret = orig_open(pathname, flags, mode);
-	logopen(pathname);
-
-	return ret;
-}
-
-FILE* fopen(const char* pathname, const char* mode){
-	FILE *ret = NULL;
-	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
-		return ret;
-
-	if(!orig_fopen)
-		orig_fopen = dlsym(RTLD_NEXT, "fopen");
-	ret = orig_fopen(pathname, mode);
-	logopen(pathname);
-	return ret;
-}
-
-int open64(const char *pathname, int flags, mode_t mode){
-	int ret = -1;
-	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-		return ret;
-
-	if(!orig_open64)
-		orig_open64 = dlsym(RTLD_NEXT, "open64");		
-	ret = orig_open64(pathname, flags, mode);
-	logopen(pathname);
-	return ret;
-}
-
-
-proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
-	proc_t* ret = NULL;
-	void *libproc = dlopen("libproc-3.2.8.so", RTLD_LAZY);	
-	if(libproc != NULL && (orig_readproc = dlsym(libproc, "readproc"))){
-		ret = orig_readproc(PT, p);
-		if(strstr(p->cmd, "zxzz") != NULL)
-			ret = NULL; 
-	}
-	dlclose(libproc);
-	return ret;
-}
-
-int unlink(const char* pathname){
-	int ret = -1;
-	if(!orig_unlink)
-		orig_unlink = dlsym(RTLD_NEXT, "unlink");
-	if(!is_unremovable(pathname)){
-		ret = orig_unlink(pathname);
-	}
-	else
-		errno = EPERM;	
-	logunlink(pathname);
-	return ret;
-}
-
-
-int unlinkat(int dirfd, const char *pathname, int flags){
-	int ret = -1;
-	if(!orig_unlinkat)
-		orig_unlinkat = dlsym(RTLD_NEXT, "unlinkat");
-	if(!is_unremovable(pathname)){
-		ret = orig_unlinkat(dirfd, pathname, flags);
-	}
-	else
-		errno = EPERM;	
-	logunlink(pathname);	
-	return ret;
-}
-
-int openat(int dirfd, const char *pathname, int flags, mode_t mode){
-	int ret = -1;
-	if(!orig_openat)
-		orig_openat = dlsym(RTLD_NEXT, "openat");
-	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-		return ret;
-
-	return orig_openat(dirfd, pathname, flags, mode);
-}
-
-
-int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
-	int ret = -1;
-	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
-	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
-	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
-		printf("Not allowed to connect to %s\n", destaddr);
-		return ret;
-	}	
-	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
-	mylog(logstring);
-	if(!orig_connect)
-		orig_connect = dlsym(RTLD_NEXT, "connect");
-	ret = orig_connect(sockfd, addr, addrlen);
-	return ret;
-}
-
-
-int socket(int domain, int type, int protocol){
-	int ret = -1;
-	orig_socket = dlsym(RTLD_NEXT, "socket");
-	if(!orig_connect)
-		ret = orig_socket(domain, type, protocol);
-	if(ret != -1){
-		socket_info[(unsigned)ret] = domain;
-	}
-	return ret;
-}
-
-FILE *freopen(const char *path, const char *mode, FILE *stream){
-	FILE *ret = NULL;
-	if(!orig_freopen)
-		orig_freopen = dlsym(RTLD_NEXT, "freopen");
-	ret = orig_freopen(path, mode, stream);
-	logopen(path);
-	return ret;
-}
-
-void logexec(const char* filename){
+void logexec(const char* filename, char *const args[]){
 	orig_snprintf = dlsym(RTLD_NEXT, "snprintf");
 	orig_snprintf(logstring, LOG_LENGTH, "execve %s", filename);
+	char *argstring = logstring + strlen(logstring);
+	int i;
+	for(i = 0; args[i] != NULL; i++){
+		orig_snprintf(argstring, LOG_LENGTH, " %s", args[i]);
+		argstring += strlen(args[i]) + 1;
+	}
 	mylog(logstring);
 }
 	
-int execve(const char *filename, char *const argv[], char *const envp[]){
-	if(!orig_execve)
-		orig_execve = dlsym(RTLD_NEXT, "execve");
-	int ret = orig_execve(filename, argv, envp);
-	logexec(filename);
-	return ret;
-}
 
 int execvp(const char *file, char *const argv[]){
 	if(!orig_execvp)
 		orig_execvp = dlsym(RTLD_NEXT, "execvp");
+	logexec(file, argv);
 	int ret = orig_execvp(file, argv);
-	logexec(file);
 	return ret;
 }
 
+
 int execl(const char *path, const char *arg, ...){
-	if(!orig_execl)
-		orig_execl = dlsym(RTLD_NEXT, "execl");
+	if(!orig_execvp){
+		orig_execvp = dlsym(RTLD_NEXT, "execvp");
+	}
 	int i = 0; char *argp = NULL;
 	va_list vlist;
 	va_start(vlist, arg);
-	while((argp = va_arg(vlist, char*) != NULL)){
+	exec_args[i++] = arg;
+	while((argp = va_arg(vlist, char*)) != NULL){
 		exec_args[i++] = argp;
 	}
 	exec_args[i] = NULL;
-	int ret = execvp(path, exec_args);
-//	int ret = execlp(path, arg);
-//	int ret = orig_execl(path, arg);
-//	logexec(path);
-	return ret;
-}	
+	logexec(path, exec_args);
+	int ret = orig_execvp(path, exec_args);
+	return -1;
+}
 
 int execlp(const char *file, const char *arg, ...){
 	if(!orig_execlp)
 		orig_execlp = dlsym(RTLD_NEXT, "execlp");
-	int ret = orig_execlp(file, arg);
-	logexec(file);
+	int i = 0; char *argp = NULL;
+	va_list vlist;
+	va_start(vlist, arg);
+	exec_args[i++] = arg;
+	while((argp = va_arg(vlist, char*)) != NULL){
+		exec_args[i++] = argp;
+	}
+	exec_args[i] = NULL;
+	logexec(file, exec_args);
+	int ret = orig_execvp(file, exec_args);
 	return ret;
 }
 
 int execle(const char *path, const char *arg,...){
 	if(!orig_execle)
 		orig_execle = dlsym(RTLD_NEXT, "execle");
-	int ret = orig_execle(path, arg);
-	logexec(path);
+	int i = 0; char *argp = NULL;
+	va_list vlist;
+	va_start(vlist, arg);
+	exec_args[i++] = arg;
+	while((argp = va_arg(vlist, char*)) != NULL){
+		exec_args[i++] = argp;
+	}
+	exec_args[i] = NULL;
+	logexec(path, exec_args);
+	int ret = orig_execvp(path, exec_args);
 	return ret;
 }
 
 int execv(const char *path, char *const argv[]){
 	if(!orig_execv)
 		orig_execv = dlsym(RTLD_NEXT, "execv");
+	logexec(path, argv);
 	int ret = orig_execv(path, argv);
-	logexec(path);
 	return ret;
 }
