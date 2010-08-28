@@ -8,9 +8,10 @@
 #include <netinet/in.h>
 #include <stdarg.h>
 
+#include "path.h"
+
 #define __USE_LARGEFILE64
 #include <dirent.h>
-#include <proc/readproc.h>
 
 #define __USE_GNU
 #include <dlfcn.h>
@@ -26,8 +27,12 @@ static char logstring[LOG_LENGTH];
 static char* exec_args[ARG_LENGTH];
 static char* exec_envs[ENV_LENGTH];
 
+#define MAX_LEN 2048
+static char max_path[MAX_LEN];
+
 
 /* Pointers to save original system calls */
+static DIR* (*orig_opendir)(const char *name);
 static struct dirent* (*orig_readdir)(DIR *dirp);
 static struct dirent64* (*orig_readdir64)(DIR *dirp);
 static int (*orig_open)(const char *pathname, int flags, mode_t mode);
@@ -37,7 +42,7 @@ static FILE* (*orig_fopen)(const char* path, const char* mode);
 static FILE* (*orig_freopen)(const char *path, const char *mode, FILE *stream);
 static int (*orig_unlink)(const char* pathname);
 static int (*orig_unlinkat)(int dirfd, const char *pathname, int flags);
-static proc_t* (*orig_readproc)(PROCTAB *restrict const PT, proc_t *restrict p);
+static int (*orig_rmdir)(const char *pathname);
 static int (*orig_connect)(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
 static int (*orig_socket)(int domain, int type, int protocol);
 static int (*orig_execl)(const char *path, const char *arg, ...);
@@ -54,6 +59,11 @@ static int (*orig_snprintf)(char *str, size_t size, const char *format, ...);
 struct sec_file{
 	char* filename;
 	int flags;
+};
+
+/* Structure to hold mapping for replaced files */
+struct replaced_file{
+	char *original, *replace;
 };
 
 /* Flags */
@@ -76,8 +86,14 @@ struct sec_file files[] = {
 	{"mylibc.so", SF_INVISIBLE | SF_UNREMOVABLE},
 	{"proftpd.log", SF_UNREMOVABLE},
 	{"thttpd.log", SF_UNREMOVABLE},
+	{"nodel", SF_UNREMOVABLE},
 //	{"superlog", SF_INVISIBLE},
 	{"mysql.log.", SF_INVISIBLE}
+};
+
+struct replaced_file replaced_files[] = {
+	{"replaceme", "inout"},
+	{"replacemedir", "inoutdir"}
 };
 
 #define SOCK_COUNT 16384
@@ -144,6 +160,32 @@ int is_unremovable(const char* filename){
 	return filter_file(filename, SF_UNREMOVABLE);
 }
 
+/* Is the given file replaced */
+char* is_replaced(const char* filename){
+	int count = (sizeof replaced_files) / (sizeof (struct replaced_file)); 
+	int i;
+	char *full_name = full_path(filename);
+	char *name = basename(full_name);
+	printf("filename: %s\n", filename);
+	strcpy(max_path, filename);
+	char *dname = dirname(max_path);
+	printf("filename: %s\nname: %s\n", filename, name);	
+	printf("full_name: %s\n", full_name);
+	for(i = 0; i < count; i++){
+		if(!strcmp(name, replaced_files[i].original)){
+			if(!strcmp(dname, ".")){
+				sprintf(max_path, "%s", replaced_files[i].replace);
+			}
+			else
+				sprintf(max_path, "%s/%s", dname, replaced_files[i].replace);
+			printf("pppp: %s\n", max_path);
+			return max_path;
+		}
+	}
+	return NULL;
+}
+
+
 /* Is the given file can be open only for append */
 int is_onlyappend(const char* filename){
 	return filter_file(filename, SF_ONLYAPPEND);
@@ -189,6 +231,17 @@ void logunlink(const char* filename){
 	free(cur_dir);
 }
 
+DIR* opendir(const char *name){
+	char *replace;
+	if((replace = is_replaced(name)) != NULL){
+		name = replace; 
+	}
+	if(!orig_opendir)
+		orig_opendir = dlsym(RTLD_NEXT, "opendir");
+	
+	return orig_opendir(name);
+}
+
 struct dirent *readdir(DIR *dirp){
 	struct dirent* dentry = NULL;
 	if(!orig_readdir)
@@ -223,6 +276,11 @@ int open(const char *pathname, int flags, mode_t mode){
 	int ret = -1;
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
+	
+	char *replace;
+	if((replace = is_replaced(pathname)) != NULL){
+		pathname = replace;
+	}
 
 	if(!orig_open)
 		orig_open = dlsym(RTLD_NEXT, "open");
@@ -237,6 +295,11 @@ FILE* fopen(const char* pathname, const char* mode){
 	if(is_onlyappend(pathname) && strchr(mode, 'w') != NULL)
 		return ret;
 
+	char *replace;
+	if((replace = is_replaced(pathname)) != NULL){
+		pathname = replace;
+	}
+
 	if(!orig_fopen)
 		orig_fopen = dlsym(RTLD_NEXT, "fopen");
 	ret = orig_fopen(pathname, mode);
@@ -249,6 +312,11 @@ int open64(const char *pathname, int flags, mode_t mode){
 	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
 		return ret;
 
+	char *replace;
+	if((replace = is_replaced(pathname)) != NULL){
+		printf("replaced_path: %s\n", replace);
+		pathname = replace;
+	}
 	if(!orig_open64)
 		orig_open64 = dlsym(RTLD_NEXT, "open64");		
 	ret = orig_open64(pathname, flags, mode);
@@ -273,11 +341,14 @@ int unlink(const char* pathname){
 	int ret = -1;
 	if(!orig_unlink)
 		orig_unlink = dlsym(RTLD_NEXT, "unlink");
+	puts("unlink2");
 	if(!is_unremovable(pathname)){
+		puts("unlink3");
 		ret = orig_unlink(pathname);
 	}
 	else
 		errno = EPERM;	
+	puts("unlink5");
 	logunlink(pathname);
 	return ret;
 }
@@ -294,6 +365,18 @@ int unlinkat(int dirfd, const char *pathname, int flags){
 		errno = EPERM;	
 	logunlink(pathname);	
 	return ret;
+}
+
+
+int rmdir(const char *pathname){
+	if(is_unremovable(pathname)){
+		errno = EPERM;
+		return -1;
+	}
+	if(!orig_rmdir)
+		orig_rmdir = dlsym(RTLD_NEXT, "rmdir");
+	
+	return orig_rmdir(pathname);
 }
 
 int openat(int dirfd, const char *pathname, int flags, mode_t mode){
