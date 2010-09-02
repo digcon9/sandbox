@@ -9,14 +9,13 @@
 char max_path[MAX_LEN];
 
 
-int is_absolute_path(char *pathname){
-	if(strlen(pathname) > 0 && pathname[0] == '/')
+int is_absolute_path(const char *pathname){
+	if(strlen(pathname) && pathname[0] == '/')
 		return 1;
 	return 0;
 }
 
 void resolve_path(char *path){
-	puts("in resolve path");
 	char ret[MAX_LEN], ret1[MAX_LEN], *tok;
 	char** tokens = string_to_tokens(path, "/");
 	int i = 0, len = 0;
@@ -24,7 +23,6 @@ void resolve_path(char *path){
 		len++;
 	}
 	int two_dots = 0;
-	strcpy(ret, "\b");
 	for(i = len - 1; i >= 0; i--){
 		if(strlen(tokens[i]) <= 0 || !strcmp(tokens[i], ".") || !strcmp(tokens[i], "/")) continue;
 		if(!strcmp(tokens[i], "..")) {++two_dots; continue;}
@@ -57,7 +55,7 @@ char** string_to_tokens(char *str, char *delim){
 	return ret;
 }
 
-char* complete_path(char* cur_dir, char* pathname){
+char* complete_path(char* cur_dir, const char* pathname){
 	if(strlen(pathname) <= 0 || !strcmp(pathname, ".") || !strcmp(pathname, "./")){
 		return cur_dir;
 	}	
@@ -65,14 +63,14 @@ char* complete_path(char* cur_dir, char* pathname){
 		return pathname;
 	}
 	sprintf(max_path, "%s/%s", cur_dir, pathname);
-	printf("before resolving: %s\n", max_path);
 	resolve_path(max_path);
 	return max_path;
 }
 
-char *full_path(char* filepath){
+char *full_path(const char* filepath){
 	char *cur_dir = get_current_dir_name();
-	return complete_path(cur_dir, filepath);	
+	char* ret =  complete_path(cur_dir, filepath);	
+	free(cur_dir);
+	return ret;
 }
-
 

